@@ -99,6 +99,7 @@ void Server::threadLoop()
 			if (client_fd != -1) {
 				_fds.push_back(pollfd{client_fd, POLLIN, 0});
 				_clients.emplace(client_fd, client_fd);
+				_clients[client_fd].setDB(&_db);
 			} else {
 				std::cout << "accept => -1 \t|\t errno = " << errno << std::endl;
 			}

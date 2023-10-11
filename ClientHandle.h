@@ -8,13 +8,15 @@
 class ClientHandle
 {
 public:
-	explicit ClientHandle(DB* db, int fd);
+	explicit ClientHandle(int fd);
+	ClientHandle() = default;
+	void setDB(DB *db);
 	~ClientHandle();
 
 	void terminate();
 
 private:
-	void printSequence(Sequence seq, int index);
+	std::string convertSequenceToString(Sequence seq, int index);
 	void threadLoop();
 	std::string readMessage();
 	void sendMessage(const std::string &message);
