@@ -131,10 +131,10 @@ bool Server::initSocket()
 
 	struct sockaddr_in server_address = {0, 0, 0, 0};
 	server_address.sin_family = AF_INET;
-	//int inet_address = inet_aton(_ip_address.c_str(), &server_address.sin_addr);
+	int inet_address = inet_aton(_ip_address.c_str(), &server_address.sin_addr);
 	//if (inet_address) server_address.sin_addr.s_addr = INADDR_ANY;
-	//if (!inet_address) server_address.sin_addr.s_addr = INADDR_ANY;
-	server_address.sin_addr.s_addr = INADDR_ANY;
+	if (!inet_address) server_address.sin_addr.s_addr = INADDR_ANY;
+	//server_address.sin_addr.s_addr = INADDR_ANY;
 	server_address.sin_port = htons(_port);
 
 	if (bind(_sock_fd, (const struct sockaddr*)&server_address, sizeof(server_address)) == -1)

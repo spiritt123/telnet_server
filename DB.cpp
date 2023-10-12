@@ -26,6 +26,10 @@ void DB::destroyClientInfo(uint64_t id)
 
 void DB::setSequence(uint64_t id, int number, uint64_t offset, uint64_t shift)
 {
+	// Инвариант
+	if (!offset || !shift)
+		return;
+
 	std::lock_guard<std::mutex> l{_mtx};
 	switch (number)
 	{
@@ -42,6 +46,12 @@ void DB::setSequence(uint64_t id, int number, uint64_t offset, uint64_t shift)
 
 }
 
+void incrementRecord(Sequence &sequence)
+{
+	if (sequence.offset && sequence.shift)
+		sequence.iter++;
+}
+
 Record DB::getSequence(uint64_t id)
 {
 	std::lock_guard<std::mutex> l{_mtx};
@@ -49,9 +59,9 @@ Record DB::getSequence(uint64_t id)
 	Record &record = _records[id];
 	Record result = record;
 
-	record.first.iter++;
-	record.second.iter++;
-	record.third.iter++;
+	incrementRecord(record.first);
+	incrementRecord(record.second);
+	incrementRecord(record.third);
 
 	return result;
 }

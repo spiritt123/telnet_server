@@ -33,12 +33,16 @@ void ClientHandle::terminate()
 
 std::string ClientHandle::convertSequenceToString(Sequence seq, int index)
 {
+	if (seq.offset == 0)
+		return "";
+
 	std::stringstream ss;
 	// проверка на то, можем ли мы сделать следующий шаг
 	if (std::numeric_limits<uint64_t>::max() - seq.offset < seq.shift * seq.iter)
 	{
 		//reset
 		_db->setSequence(_fd, index,  seq.offset, seq.shift);
+		_db->getSequence(_fd); // коррекция индекса
 		ss << seq.offset << " ";
 		return ss.str();
 	}
@@ -62,12 +66,13 @@ void ClientHandle::threadLoop()
 				Record record = _db->getSequence(_fd);
 
 				std::string result;
-				result += convertSequenceToString(record.first, 1) + " ";
-				result += convertSequenceToString(record.second, 2) + " ";
+				result += convertSequenceToString(record.first, 1) + " |\t";
+				result += convertSequenceToString(record.second, 2) + " |\t";
 				result += convertSequenceToString(record.third, 3) + "\n";
 				sendMessage(result);
 				if (_terminate)
 					return;
+				std::this_thread::sleep_for(std::chrono::milliseconds(200));
 			}
 		}
 
@@ -101,7 +106,7 @@ std::string ClientHandle::readMessage()
 void ClientHandle::sendMessage(const std::string& message) {
     int n = send(_fd, message.c_str(), message.size(), MSG_NOSIGNAL);
     if (n != static_cast<int>(message.size())) {
-                std::cout << message << "\n";
+        //        std::cout << message << "\n";
         //std::cout << "Error while sending message, message size: " 
 		//		  << message.size() << " bytes sent: " << std::endl;
         terminate();
