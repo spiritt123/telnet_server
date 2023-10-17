@@ -3,6 +3,7 @@
 #include <cassert>
 #include <sstream>
 #include <iostream>
+#include <vector>
 #include <sys/socket.h>
 
 ClientHandle::ClientHandle(int fd)
@@ -92,15 +93,19 @@ void ClientHandle::threadLoop()
 
 std::string ClientHandle::readMessage()
 {
-	std::string buffer(1024, '\0');
-
-	int read_bytes = recv(_fd, buffer.data(), buffer.size(), 0);
-	if (read_bytes < 1)
-	{
-		//std::cout << "Error in read message \t|\t read bytes = " << read_bytes << std::endl;
-        return "";
-	}
-	return buffer;
+        const unsigned int MAX_BUF_LENGTH = 4096;
+        std::vector<char> buffer(MAX_BUF_LENGTH);
+        std::string rcv;
+        int bytesReceived = 0;
+        bytesReceived = recv(_fd, &buffer[0], buffer.size(), 0);
+        // append string from buffer.
+        if ( bytesReceived == -1 ) {
+                //std::cout << "Error in read message \t|\t read bytes = " << read_bytes << std::endl;
+                return "";
+        } else {
+                rcv.append( buffer.cbegin(), buffer.cend() );
+        }
+        return rcv;
 }
 
 void ClientHandle::sendMessage(const std::string& message) {
