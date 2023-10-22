@@ -1,6 +1,6 @@
 CC=g++
 CFLAGS=-c -Wall
-LDFLAGS=
+LDFLAGS= -lpthread
 SOURCES=main.cpp Server.cpp ClientHandle.cpp
 OBJECTS=$(SOURCES:.cpp=.o)
 EXECUTABLE=server
