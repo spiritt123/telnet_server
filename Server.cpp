@@ -15,6 +15,7 @@
 
 Server::Server(std::string ip_address, unsigned int port)
 	: _event_fd(-1)
+	, _sock_fd(-1)
 	, _ip_address(ip_address)
 	, _port(port)
 	, _client_count(50)
@@ -25,10 +26,9 @@ Server::~Server()
 {
 	stop();
 	if (_event_fd != -1)
-	{
 		close(_event_fd);
-	}
-	clear();
+	if (_sock_fd != -1)
+		close(_sock_fd);
 }
 
 void Server::start()
@@ -48,7 +48,6 @@ void Server::start()
 	}
 
 	_thread = std::thread([this]() { threadLoop(); });
-
 	pthread_setname_np(_thread.native_handle(), "Server");
 }
 
@@ -96,21 +95,19 @@ void Server::threadLoop()
 		{
 			int client_fd = accept(_sock_fd, NULL, NULL);
 			std::cout << "New connection" << std::endl;
-			if (client_fd != -1) {
-				_fds.push_back(pollfd{client_fd, POLLIN, 0});
+			if (client_fd != -1) 
+			{
 				_clients.emplace(client_fd, client_fd);
-				_clients[client_fd].setDB(&_db);
+				std::thread t = std::thread([this, client_fd]() { startClientHandle(client_fd); });
+				t.detach();
+				
 			} else {
 				std::cout << "accept => -1 \t|\t errno = " << errno << std::endl;
 			}
             _fds[1].revents = 0;
-			_db.createClientInfo(client_fd);
         }
 
-		updateClientsState();
 	}
-
-	clear();
 }
 
 
@@ -132,9 +129,7 @@ bool Server::initSocket()
 	struct sockaddr_in server_address = {0, 0, 0, 0};
 	server_address.sin_family = AF_INET;
 	int inet_address = inet_aton(_ip_address.c_str(), &server_address.sin_addr);
-	//if (inet_address) server_address.sin_addr.s_addr = INADDR_ANY;
 	if (!inet_address) server_address.sin_addr.s_addr = INADDR_ANY;
-	//server_address.sin_addr.s_addr = INADDR_ANY;
 	server_address.sin_port = htons(_port);
 
 	if (bind(_sock_fd, (const struct sockaddr*)&server_address, sizeof(server_address)) == -1)
@@ -152,40 +147,16 @@ bool Server::initSocket()
 	return true;
 }
 
-
-void Server::updateClientsState()
+void Server::startClientHandle(int fd)
 {
-	char c;
-	for (size_t i = 2; i < _fds.size(); ++i)
-	{
-		if (!_fds[i].revents) continue;
-		if (recv(_fds[i].fd, &c, 1, MSG_PEEK | MSG_DONTWAIT) != 0) continue;
+	ClientHandle &client = _clients[fd];
+	client.threadLoop();
 
-		std::cout << "Client disconnected" << std::endl;
-		eraseFDByIndex(i);
-		--i; // коррекция индекса при удалении текущего элемента.
+	// удаление закрытой(оборванной) сессии
+	{
+		std::cout << "close " << fd << std::endl;
+		std::lock_guard<std::mutex> l{_mtx};
+		_clients.erase(fd);
 	}
 }
-
-void Server::eraseFDByIndex(size_t index)
-{
-	_db.destroyClientInfo(index);
-	_clients.erase(_fds[index].fd);
-	close(_fds[index].fd);
-	_fds.erase(_fds.begin() + index);
-}
-
-void Server::clear()
-{
-    for (auto it = _fds.begin() + 1; it != _fds.end(); ++it) 
-	{
-        close(it->fd);
-        if (_clients.find(it->fd) != _clients.end()) 
-		{
-            _clients.at(it->fd).terminate();
-        }
-    }
-	_fds.clear();
-}
-
 

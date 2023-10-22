@@ -1,7 +1,7 @@
 CC=g++
 CFLAGS=-c -Wall
 LDFLAGS=
-SOURCES=main.cpp Server.cpp ClientHandle.cpp DB.cpp
+SOURCES=main.cpp Server.cpp ClientHandle.cpp
 OBJECTS=$(SOURCES:.cpp=.o)
 EXECUTABLE=server
 

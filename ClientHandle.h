@@ -1,32 +1,54 @@
 #pragma once
 
+#include <iostream>
 #include <string>
 #include <thread>
+#include <array>
+#include <optional>
 
-#include "DB.h"
+
+struct Sequence
+{
+	uint64_t offset;
+	uint64_t shift;
+	uint64_t iter;
+
+	void nextStep()
+	{
+		++iter;
+		
+		//проверим можем ли мы сделать сдвиг от последовательности
+		if ((uint64_t)(-1) - shift * (iter - 1) < shift)
+		{
+			iter = 0;
+			return;
+		}
+		
+		//обработка случая суммы
+		if ((uint64_t)(-1) - offset < shift * iter)
+		{
+			iter = 0;
+			return;
+		}
+	}
+};
 
 class ClientHandle
 {
 public:
 	explicit ClientHandle(int fd);
 	ClientHandle() = default;
-	void setDB(DB *db);
 	~ClientHandle();
-
-	void terminate();
+	void threadLoop();
 
 private:
-	std::string convertSequenceToString(Sequence seq, int index);
-	void threadLoop();
+	std::string convertSequenceToString(Sequence seq);
 	std::string readMessage();
-	void sendMessage(const std::string &message);
-	void stop();
+	void sendLoop();
+	bool sendMessage(const std::string &message);
 
 private:
 	int _fd;
-	bool _terminate;
-	std::thread _thread;
-
-	DB *_db;
+	std::array<std::optional<Sequence>, 3> _records;
 };
 

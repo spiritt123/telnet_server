@@ -1,4 +1,5 @@
 #include "Server.h"
+#include <iostream>
 
 int main(int argc, char* argv[]) 
 {
@@ -10,6 +11,9 @@ int main(int argc, char* argv[])
 		ip = std::string(argv[1]);
 		port = atoi(argv[2]);
 	}
+
+	std::cout << uint64_t(-1) << " ";
+
     Server server(ip, port);
 	server.start();
     server.join();

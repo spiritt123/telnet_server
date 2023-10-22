@@ -5,123 +5,127 @@
 #include <iostream>
 #include <vector>
 #include <sys/socket.h>
+#include <regex>
+#include <unistd.h>
 
 ClientHandle::ClientHandle(int fd)
 	: _fd(fd)
-	, _terminate(false)
 {
-	assert( !_thread.joinable());
+	for (auto seq : _records)
+		seq.reset();
 
-	_thread = std::thread([this]() {threadLoop(); });
-	pthread_setname_np(_thread.native_handle(), "ClientHandle");
 }
 
 ClientHandle::~ClientHandle()
 {
-	terminate();
-	stop();
+	close(_fd);
 }
 
-void ClientHandle::setDB(DB* db)
+std::string ClientHandle::convertSequenceToString(Sequence seq)
 {
-	_db = db;
-}
+	// максимальная длина числа uint64_t = 20 символов.
+	// 20 символов на число + 1 символ на пробел * 3 последовательности + 1 байт(конец строки)
+	std::string str(21, ' ');
 
-void ClientHandle::terminate()
-{
-	_terminate = true;
-}
+	sprintf(str.data(), "%20llu", seq.offset + seq.shift * seq.iter);
 
-std::string ClientHandle::convertSequenceToString(Sequence seq, int index)
-{
-	if (seq.offset == 0)
-		return "";
-
-	std::stringstream ss;
-	// проверка на то, можем ли мы сделать следующий шаг
-	if (std::numeric_limits<uint64_t>::max() - seq.offset < seq.shift * seq.iter)
-	{
-		//reset
-		_db->setSequence(_fd, index,  seq.offset, seq.shift);
-		_db->getSequence(_fd); // коррекция индекса
-		ss << seq.offset << " ";
-		return ss.str();
-	}
-
-	ss << seq.offset + seq.shift * seq.iter;
-	return ss.str();
+	return str;
 }
 
 void ClientHandle::threadLoop()
 {
-	while (!_terminate)
+	while (true)
 	{
 		std::string message = readMessage();
 		
 		std::string prefix = "export seq";
 		if (message.rfind(prefix, 0) == 0) 
 		{
-			//start loop
-			while(true)
-			{
-				Record record = _db->getSequence(_fd);
-
-				std::string result;
-				result += convertSequenceToString(record.first, 1) + " |\t";
-				result += convertSequenceToString(record.second, 2) + " |\t";
-				result += convertSequenceToString(record.third, 3) + "\n";
-				sendMessage(result);
-				if (_terminate)
-					return;
-				std::this_thread::sleep_for(std::chrono::milliseconds(200));
-			}
+			sendLoop();
+			return;
 		}
+
+		// проверка на то, чтобы строка имела формат: 
+		// слово(seq)+число(номер очереди) + число(начало последовательности) + число(шаг)
+		static const std::regex r(R"(\w{3}+\d+\ +\d+\ +\d)");
+		std::smatch m;
+		if (!std::regex_search(message, m, r))
+			continue;
 
 		char number;
 		uint64_t offset, shift;
 		if (sscanf(message.c_str(), "seq%c %lu %lu", &number, &offset, &shift) != 3)
 			continue;
 
-		if (number == '1' || number == '2' || number == '3')
-		{
-			_db->setSequence(_fd, number - '0', offset, shift);
-		}
+		if (number < '1' || number > '3')
+			continue;
 
-        //std::cout << "Received message: " << message << std::endl;
+		Sequence seq;
+		seq.offset = offset;
+		seq.shift  = shift;
+		seq.iter   = 0;
+		
+		// вычитаем единицу для того, что узнать индекс последовательности
+		int index = number - '1';
+		_records[index].emplace(seq);
 	}
 }
 
 std::string ClientHandle::readMessage()
 {
-        const unsigned int MAX_BUF_LENGTH = 4096;
-        std::vector<char> buffer(MAX_BUF_LENGTH);
-        std::string rcv;
-        int bytesReceived = 0;
-        bytesReceived = recv(_fd, &buffer[0], buffer.size(), 0);
-        // append string from buffer.
-        if ( bytesReceived == -1 ) {
-                //std::cout << "Error in read message \t|\t read bytes = " << read_bytes << std::endl;
-                return "";
-        } else {
-                rcv.append( buffer.cbegin(), buffer.cend() );
-        }
-        return rcv;
+	const unsigned int MAX_BUF_LENGTH = 4096;
+	std::vector<char> buffer(MAX_BUF_LENGTH);
+	std::string rcv;
+
+	int bytesReceived = 0;
+	bytesReceived = recv(_fd, &buffer[0], buffer.size(), 0);
+	
+	if ( bytesReceived == -1 ) 
+	{
+		return "";
+	} 
+	else 
+	{
+		rcv.append( buffer.cbegin(), buffer.cend() );
+	}
+
+	return rcv;
 }
 
-void ClientHandle::sendMessage(const std::string& message) {
-    int n = send(_fd, message.c_str(), message.size(), MSG_NOSIGNAL);
-    if (n != static_cast<int>(message.size())) {
-        //        std::cout << message << "\n";
-        //std::cout << "Error while sending message, message size: " 
-		//		  << message.size() << " bytes sent: " << std::endl;
-        terminate();
-    }
-}
-
-void ClientHandle::stop()
+bool ClientHandle::sendMessage(const std::string& message) 
 {
-    if (_thread.joinable()) {
-        _thread.join();
-    }
+    int n = send(_fd, message.c_str(), message.size(), MSG_NOSIGNAL);
+
+    if (n != static_cast<int>(message.size()))
+		return false;
+
+	return true;
 }
 
+void ClientHandle::sendLoop()
+{
+	while (true)
+	{
+		std::string result = "|";
+
+		for (size_t i = 0; i < _records.size(); ++i)
+		{
+			if (_records[i].has_value())
+			{
+				result += convertSequenceToString(_records[i].value()) + "|";
+				_records[i]->nextStep();
+			}
+			else
+			{
+				// есть последовательность не была задана или 
+				// при установки последовательности была допущена ошибка,
+				// то заполняем колонку значения пустыми символами
+				result += std::string(20, ' ') + "|";
+			}
+		}
+		result += "\n";
+		if (!sendMessage(result))
+			return;
+		std::this_thread::sleep_for(std::chrono::milliseconds(200));
+	}
+}

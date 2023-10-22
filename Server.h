@@ -4,9 +4,9 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <mutex>
 
 #include "ClientHandle.h"
-#include "DB.h"
 
 class Server
 {
@@ -19,24 +19,23 @@ public:
 	void join();
 
 private:
+	bool initSocket();
+	void threadLoop();
+
+	void startClientHandle(int);
+
+private:
+	std::mutex _mtx;
 	std::thread _thread;
+
 	int _event_fd;
+	int _sock_fd;
+
 	std::string _ip_address;
 	unsigned int _port;
-	int _sock_fd;
 	int _client_count;
 
 	std::vector<struct pollfd> _fds;
 	std::unordered_map<int, ClientHandle> _clients;
-
-	DB _db;
-
-private:
-	void threadLoop();
-
-	bool initSocket();
-	void updateClientsState();
-	void eraseFDByIndex(size_t index);
-	void clear();
 };
 
