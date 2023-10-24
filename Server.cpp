@@ -48,7 +48,7 @@ void Server::start()
     }
 
     _thread = std::thread([this]() { threadLoop(); });
-    pthread_setname_np(_thread.native_handle(), "Server");
+    //pthread_setname_np(_thread.native_handle(), "Server");
 }
 
 void Server::stop()
