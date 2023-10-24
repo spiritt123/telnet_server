@@ -1,5 +1,5 @@
 CC=g++
-CFLAGS=-c -Wall
+CFLAGS=-c -Wall -std=gnu++17
 LDFLAGS= -lpthread
 SOURCES=main.cpp Server.cpp ClientHandle.cpp
 OBJECTS=$(SOURCES:.cpp=.o)
