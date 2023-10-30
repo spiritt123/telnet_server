@@ -63,6 +63,9 @@ void ClientHandle::threadLoop()
         if (number < '1' || number > '3')
             continue;
 
+		if (offset == 0 || shift == 0)
+			continue;
+
         Sequence seq;
         seq.offset = offset;
         seq.shift  = shift;

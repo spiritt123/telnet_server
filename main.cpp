@@ -12,8 +12,6 @@ int main(int argc, char* argv[])
         port = atoi(argv[2]);
     }
 
-    std::cout << uint64_t(-1) << " ";
-
     Server server(ip, port);
     server.start();
     server.join();
